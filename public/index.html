@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Todo App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --text: #222222;
+  --muted: #666666;
+  --accent: #0066ff;
+  --border: #e0e0e0;
+  --radius: 12px;
+  --shadow: rgba(0,0,0,0.08) 0 2px 4px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --surface: #1e1e1e;
+    --text: #e0e0e0;
+    --muted: #aaaaaa;
+    --accent: #3399ff;
+    --border: #333333;
+    --shadow: rgba(0,0,0,0.4) 0 2px 4px;
+  }
+}
+* { box-sizing: border-box; margin:0; padding:0; }
+body {
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+header, footer {
+  text-align: center;
+  padding: 24px 0;
+}
+h1 {
+  font-size: clamp(2rem,5vw,3.5rem);
+  margin-bottom: 8px;
+}
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 16px;
+}
+button, input[type="text"], input[type="email"], input[type="password"] {
+  font: inherit;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  transition: background 150ms, border-color 150ms, box-shadow 150ms;
+}
+button:hover, input[type="text"]:hover, input[type="email"]:hover, input[type="password"]:hover {
+  border-color: var(--accent);
+}
+button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.todo-list {
+  list-style: none;
+  margin-top: 16px;
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.todo-item.completed span {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.todo-actions button {
+  margin-left: 8px;
+}
+form {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.error, .status {
+  margin-top: 12px;
+  color: var(--accent);
+}
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1>My Todos</h1>
+<div id="user-info" class="hidden">
+<span id="user-email"></span>
+<button id="logout-btn">Log out</button>
+</div>
+</header>
+
+<main id="app" class="hidden">
+<h2>Your List</h2>
+<ul id="todo-list" class="todo-list"></ul>
+<form id="new-todo-form">
+<input type="text" id="new-todo-input" placeholder="What needs to be done?" required>
+<button type="submit">Add</button>
+</form>
+<div id="status" class="status hidden"></div>
+<div id="error" class="error hidden"></div>
+</main>
+
+<section id="auth-section">
+<h2>Sign In / Sign Up</h2>
+<div id="auth-error" class="error hidden"></div>
+<form id="signup-form">
+<input type="email" id="signup-email" placeholder="Email" required>
+<input type="password" id="signup-password" placeholder="Password" required>
+<button type="submit">Sign Up</button>
+</form>
+<form id="login-form" class="hidden">
+<input type="email" id="login-email" placeholder="Email" required>
+<input type="password" id="login-password" placeholder="Password" required>
+<button type="submit">Log In</button>
+</form>
+<form id="confirm-form" class="hidden">
+<input type="text" id="confirm-email" placeholder="Email" required>
+<input type="text" id="confirm-code" placeholder="Confirmation Code" required>
+<button type="submit">Confirm</button>
+</form>
+</section>
+
+<footer>
+<p>© 2026 Todo App</p>
+</footer>
+</div>
+
+<script>
+(async function() {
+  const api = {
+    getMe: async () => {
+      const r = await fetch('/auth/me');
+      if (r.status===200) return r.json();
+      throw new Error('Unauthenticated');
+    },
+    signup: async (email,password) => {
+      const r = await fetch('/auth/signup', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,password})});
+      return r.json();
+    },
+    confirm: async (email,code) => {
+      const r = await fetch('/auth/confirm', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,code})});
+      return r.json();
+    },
+    login: async (email,password) => {
+      const r = await fetch('/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,password})});
+      return r.json().then(data=>({status:r.status, data}));
+    },
+    logout: async () => {
+      await fetch('/auth/logout', {method:'POST'});
+    },
+    listTodos: async () => {
+      const r = await fetch('/todos');
+      return r.json();
+    },
+    addTodo: async (content) => {
+      const r = await fetch('/todos', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content})});
+      return r.json();
+    },
+    updateTodo: async (id, updates) => {
+      const r = await fetch('/todos/' + encodeURIComponent(id), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updates)});
+      return r.json();
+    },
+    deleteTodo: async (id) => {
+      const r = await fetch('/todos/' + encodeURIComponent(id), {method:'DELETE'});
+      return r.json();
+    }
+  };
+
+  const el = (id)=>document.getElementById(id);
+  const show = (e)=>e.classList.remove('hidden');
+  const hide = (e)=>e.classList.add('hidden');
+
+  // Auth flow
+  async function initAuth() {
+    try {
+      const me = await api.getMe();
+      hide(el('auth-section'));
+      show(el('app'));
+      el('user-email').textContent = me.email;
+      show(el('user-info'));
+      loadTodos();
+    } catch (_) {
+      hide(el('app'));
+      show(el('auth-section'));
+      hide(el('user-info'));
+    }
+  }
+
+  el('signup-form').addEventListener('submit', async (e)=> {
+    e.preventDefault();
+    hide(el('auth-error'));
+    const email = el('signup-email').value.trim();
+    const password = el('signup-password').value;
+    const resp = await api.signup(email,password);
+    if (resp.error) {
+      el('auth-error').textContent = resp.error;
+      show(el('auth-error'));
+    } else {
+      // show confirm form
+      hide(el('signup-form'));
+      show(el('confirm-form'));
+      el('confirm-email').value = email;
+    }
+  });
+
+  el('confirm-form').addEventListener('submit', async (e)=> {
+    e.preventDefault();
+    hide(el('auth-error'));
+    const email = el('confirm-email').value.trim();
+    const code = el('confirm-code').value.trim();
+    const resp = await api.confirm(email,code);
+    if (resp.error) {
+      el('auth-error').textContent = resp.error;
+      show(el('auth-error'));
+    } else {
+      // after confirmation, show login
+      hide(el('confirm-form'));
+      show(el('login-form'));
+    }
+  });
+
+  el('login-form').addEventListener('submit', async (e)=> {
+    e.preventDefault();
+    hide(el('auth-error'));
+    const email = el('login-email').value.trim();
+    const password = el('login-password').value;
+    const result = await api.login(email,password);
+    if (result.status===200) {
+      await initAuth();
+    } else if (result.status===403 && result.data.code==='NOT_CONFIRMED') {
+      hide(el('login-form'));
+      show(el('confirm-form'));
+      el('confirm-email').value = email;
+    } else {
+      el('auth-error').textContent = result.data.error || 'Login failed';
+      show(el('auth-error'));
+    }
+  });
+
+  el('logout-btn').addEventListener('click', async ()=> {
+    await api.logout();
+    await initAuth();
+  });
+
+  // Todo UI
+  async function loadTodos() {
+    try {
+      const todos = await api.listTodos();
+      const list = el('todo-list');
+      list.innerHTML = '';
+      if (todos.length===0) {
+        const li = document.createElement('li');
+        li.textContent = 'No todos yet. Add one!';
+        li.style.color = 'var(--muted)';
+        list.appendChild(li);
+        return;
+      }
+      todos.forEach(t=> renderTodo(t));
+    } catch (err) {
+      showError('Failed to load todos');
+    }
+  }
+
+  function renderTodo(item) {
+    const li = document.createElement('li');
+    li.className = 'todo-item' + (item.completed ? ' completed' : '');
+    const span = document.createElement('span');
+    span.textContent = item.content;
+    li.appendChild(span);
+
+    const actions = document.createElement('div');
+    actions.className = 'todo-actions';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = item.completed;
+    chk.addEventListener('change', async ()=> {
+      await api.updateTodo(item.id, {completed: chk.checked});
+      li.classList.toggle('completed', chk.checked);
+    });
+    actions.appendChild(chk);
+
+    const del = document.createElement('button');
+    del.textContent = 'Delete';
+    del.addEventListener('click', async ()=> {
+      await api.deleteTodo(item.id);
+      li.remove();
+    });
+    actions.appendChild(del);
+    li.appendChild(actions);
+    el('todo-list').appendChild(li);
+  }
+
+  el('new-todo-form').addEventListener('submit', async (e)=> {
+    e.preventDefault();
+    hide(el('error'));
+    const input = el('new-todo-input');
+    const content = input.value.trim();
+    if (!content) return;
+    try {
+      const newItem = await api.addTodo(content);
+      renderTodo(newItem);
+      input.value = '';
+    } catch (err) {
+      showError('Could not add todo');
+    }
+  });
+
+  function showError(msg) {
+    const err = el('error');
+    err.textContent = msg;
+    show(err);
+  }
+
+  await initAuth();
+})();
+</script>
+</body>
+</html>
